@@ -137,14 +137,6 @@ black .
 
 For more detailed troubleshooting, see the [Troubleshooting Guide](docs/troubleshooting.md).
 
-## 📘 Documentation
-
-- [Installation Guide](docs/installation.md)
-- [Gesture System](docs/gestures.md)
-- [Blender Integration](docs/blender.md)
-- [API Reference](docs/api.md)
-- [Performance Optimization](docs/performance.md)
-
 ## 🗺️ Roadmap
 
 - [ ] Additional gesture support
