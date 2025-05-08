@@ -1,11 +1,11 @@
-# Y2K Art Project
+# RTHT-3D : Real-Time Hand Tracking 3D Art Project
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 An interactive 3D art framework combining hand gesture recognition with a nostalgic Y2K aesthetic. This project enables users to manipulate 3D objects in a Blender environment using intuitive hand gestures captured through a webcam, inspired by futuristic interfaces from films like Minority Report.
 
-![Y2K Art Project Demo](docs/gif/demo.gif)
+![RTHT-3D Demo](docs/gif/demo.gif)
 
 ## ✨ Features
 
@@ -74,7 +74,7 @@ An interactive 3D art framework combining hand gesture recognition with a nostal
 ## 🧩 Project Structure
 
 ```
-y2k_art_project/
+project/
 ├── hand_tracking.py        # Hand tracking and gesture recognition module
 ├── Blender/
 │   ├── sounds/                 # Sound effect files (not provided)
@@ -164,6 +164,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📬 Contact
 
-Project Link: [https://github.com/yourusername/y2k-art-project](https://github.com/yourusername/y2k-art-project)
+Project Link: [https://github.com/NathanKneT/RTHT-3D](https://github.com/NathanKneT/RTHT-3D)
 
-Join our [Discord community](https://discord.gg/example) for discussions and support!
+Join our [Discord GLHF community](https://discord.gg/example) for discussions and support!
