@@ -29,8 +29,8 @@ An interactive 3D art framework combining hand gesture recognition with a nostal
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/y2k-art-project.git
-   cd y2k-art-project
+   git clone https://github.com/NathanKneT/RTHT-3D
+   cd RTHT-3D
    ```
 
 2. Install required Python dependencies:
@@ -47,7 +47,7 @@ An interactive 3D art framework combining hand gesture recognition with a nostal
 
 1. Start the Blender environment:
    ```bash
-   blender y2k_art_project.blend
+   blender sandbox.blend
    ```
 
 2. In Blender, open the Scripting tab and run `blender_listener.py`
@@ -92,7 +92,7 @@ project/
 
 Place your images in the `images/` directory to have them automatically loaded as textures for the 3D planes in Blender.
 
-### Adjusting Y2K Aesthetics
+### Adjusting Materials Aesthetics
 
 Modify the `create_y2k_material()` function in `blender_listener.py` to customize:
 - Colors and glow intensity
