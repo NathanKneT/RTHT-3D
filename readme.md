@@ -5,7 +5,7 @@
 
 An interactive 3D art framework combining hand gesture recognition with a nostalgic Y2K aesthetic. This project enables users to manipulate 3D objects in a Blender environment using intuitive hand gestures captured through a webcam, inspired by futuristic interfaces from films like Minority Report.
 
-![Y2K Art Project Demo](docs/images/demo.gif)
+![Y2K Art Project Demo](docs/gif/demo.gif)
 
 ## ✨ Features
 
