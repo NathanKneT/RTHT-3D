@@ -22,11 +22,18 @@ rotation_smoothing = 0.02  # Rotation smoothing factor
 scale_smoothing = 0.02  # Scale smoothing factor
 last_creation_time = 0
 creation_cooldown = 1.0  # Cooldown d'une seconde entre les créations
-position_history = []  # Historique des positions pour le lissage
-history_max_size = 3   # Nombre de positions à conserver
-delta_smoothing = 0.1  # Augmenté pour plus de réactivité
+position_history = []  # History of positions for smoothing
+history_max_size = 3   # Number of history points to keep
+delta_smoothing = 0.1  # Increase for reactive smoothing
 color_separation_mode = False
 color_planes = []
+painting_mode = False
+paint_trail = []
+current_paint_color = (0.0, 0.8, 1.0, 1.0)  # Start with cyan
+paint_thickness = 0.05  # Default thickness
+paint_cooldown = 0.05  # Time between paint points to control density
+last_paint_time = 0
+paint_plane_distance = 5.0  # Fixed distance from camera for all paint strokes
 
 # Interface options
 show_gestures_overlay = True  # Show gesture info in 3D viewport
@@ -315,34 +322,34 @@ def move_selected_object(x, y, prev_x=None, prev_y=None):
             return
         
         if prev_x is not None and prev_y is not None:
-            # Calculer le delta
+            # Calculate deltas
             dx = (x - prev_x) * 25.0
             dy = (prev_y - y) * 25.0
             
-            # Ajouter à l'historique
+            # Add to position history for smoothing
             position_history.append((dx, dy))
             
-            # Garder l'historique à la bonne taille
+            # Limit history size to the right size avoiding overflow
             if len(position_history) > history_max_size:
                 position_history.pop(0)
             
-            # Calculer la moyenne des mouvements récents
+            # Calculate average deltas
             avg_dx = sum(pos[0] for pos in position_history) / len(position_history)
             avg_dy = sum(pos[1] for pos in position_history) / len(position_history)
             
-            # Appliquer un seuil pour éviter les micro-mouvements
+            # Apply smoothing threshold to avoid jitter
             if abs(avg_dx) < 0.005:
                 avg_dx = 0
             if abs(avg_dy) < 0.005:
                 avg_dy = 0
             
-            # Appliquer le mouvement lissé
+            # Apply movement to selected object
             selected_object.location.x += avg_dx * delta_smoothing
             selected_object.location.y += avg_dy * delta_smoothing
             
             last_action_info = f"Moving {selected_object.name}: X:{avg_dx:.2f} Y:{avg_dy:.2f}"
             
-            # Ne jouer le son que pour des mouvements significatifs
+            # Play sound if movement is significant
             if abs(avg_dx) > 0.01 or abs(avg_dy) > 0.01:
                 play_sound("move")
             
@@ -404,6 +411,161 @@ def rotate_and_scale_object(x1, y1, x2, y2, prev_x1=None, prev_y1=None, prev_x2=
             last_action_info = f"Scaling {selected_object.name}"
     except Exception as e:
         print(f"Error in rotate_and_scale_object: {e}")
+
+# Add this function to create a material for paint strokes
+def create_paint_material(color=None):
+    """Create a glowing material for paint strokes"""
+    if color is None:
+        # Generate a random Y2K-style color if none provided
+        color = (
+            random.uniform(0.0, 1.0),
+            random.uniform(0.0, 1.0),
+            1.0,  # Keep blue high for Y2K look
+            1.0
+        )
+    
+    # Create new material
+    mat_name = f"Paint_Material_{len(bpy.data.materials)}"
+    mat = bpy.data.materials.new(name=mat_name)
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    
+    # Clear default nodes
+    for node in nodes:
+        nodes.remove(node)
+    
+    # Create emission shader for the glow effect
+    output = nodes.new(type='ShaderNodeOutputMaterial')
+    emission = nodes.new(type='ShaderNodeEmission')
+    
+    # Set color and strength
+    emission.inputs[0].default_value = color
+    emission.inputs[1].default_value = 2.0  # Strength
+    
+    # Connect nodes
+    links.new(emission.outputs[0], output.inputs[0])
+    
+    return mat
+
+# Add this function to create a sphere at a given point
+def create_paint_point(x, y):
+    """Create a small sphere to represent a paint point at fixed depth"""
+    global paint_plane_distance
+    
+    try:
+        # Convert screen coordinates to 3D world position
+        scene = bpy.context.scene
+        camera = scene.camera
+        
+        if not camera:
+            print("No active camera for painting")
+            return None
+        
+        # Get camera direction and vectors
+        from mathutils import Vector
+        cam_loc = camera.matrix_world.translation
+        cam_dir = camera.matrix_world.to_quaternion() @ Vector((0, 0, -1))
+        cam_right = camera.matrix_world.to_quaternion() @ Vector((1, 0, 0))
+        cam_up = camera.matrix_world.to_quaternion() @ Vector((0, 1, 0))
+        
+        # Convert normalized screen coordinates to view space
+        view_x = (x - 0.5) * 2  # -1 to 1
+        view_y = (0.5 - y) * 2  # -1 to 1
+        
+        # Calculate position in 3D space (at fixed depth)
+        z_depth = paint_plane_distance
+        position = cam_loc + cam_dir * z_depth + cam_right * view_x * z_depth * 0.5 + cam_up * view_y * z_depth * 0.5
+        
+        # Create the paint point sphere
+        bpy.ops.mesh.primitive_uv_sphere_add(
+            radius=paint_thickness,
+            location=position,
+            segments=8,
+            ring_count=8
+        )
+        
+        # Get the created sphere
+        paint_point = bpy.context.active_object
+        paint_point.name = f"PaintPoint_{len(paint_trail)}"
+        
+        # Apply material
+        mat = create_paint_material(current_paint_color)
+        if len(paint_point.data.materials) == 0:
+            paint_point.data.materials.append(mat)
+        else:
+            paint_point.data.materials[0] = mat
+        
+        # Add to paint trail
+        paint_trail.append(paint_point)
+        
+        # Make sure we're not selecting this as an interactive object
+        paint_point.select_set(False)
+        
+        return paint_point
+    except Exception as e:
+        print(f"Error creating paint point: {e}")
+        return None
+
+# Add this function to handle painting
+def handle_painting(gesture, x, y):
+    """Handle painting based on hand position (X,Y only)"""
+    global last_paint_time, current_paint_color
+    
+    try:
+        # Only paint with the "point" gesture (index finger extended)
+        if gesture != "point":
+            return False
+        
+        current_time = time.time()
+        
+        # Control point density with cooldown
+        if current_time - last_paint_time < paint_cooldown:
+            return False
+        
+        # Create paint point
+        paint_point = create_paint_point(x, y)
+        
+        # Update last paint time
+        last_paint_time = current_time
+        
+        return True if paint_point else False
+    except Exception as e:
+        print(f"Error in handle_painting: {e}")
+        return False
+
+# Add a function to toggle painting mode
+def toggle_painting_mode():
+    """Toggle the painting mode on/off"""
+    global painting_mode, last_action_info, current_paint_color
+    
+    painting_mode = not painting_mode
+    
+    if painting_mode:
+        # Generate a new random color when entering paint mode
+        current_paint_color = (
+            random.uniform(0.0, 1.0),
+            random.uniform(0.0, 1.0),
+            1.0,  # Keep blue high for Y2K look
+            1.0
+        )
+        last_action_info = "Painting Mode: ON"
+    else:
+        last_action_info = "Painting Mode: OFF"
+    
+    return painting_mode
+
+# Add a function to clear all paint
+def clear_paint_trail():
+    """Remove all paint points"""
+    global paint_trail, last_action_info
+    
+    for point in paint_trail:
+        if point in bpy.data.objects:
+            bpy.data.objects.remove(point, do_unlink=True)
+    
+    paint_trail = []
+    last_action_info = "Paint cleared"
 
 def create_new_plane(x, y):
     """Create a new plane at the specified position"""
@@ -550,21 +712,22 @@ def handle_data(data):
         print(f"Error processing data: {e}")
 
 def separate_image_colors(obj):
-    """Sépare l'image en ses composantes RGB sur différents plans"""
+    """"Separate the image into color planes (R, G, B) 
+    Alert : Experimental, may not work as expected i suggest you to comment this function to avoid errors"""
     global color_planes, selected_object, last_action_info
     
     try:
-        # Vérifier que l'objet existe et a un matériau avec texture
+        # Check if the object is valid and has a material
         if not obj or not obj.data.materials or len(obj.data.materials) == 0:
-            last_action_info = "Pas de matériau à séparer"
+            last_action_info = "Don't select a valid object"
             return
         
         material = obj.data.materials[0]
         if not material.use_nodes:
-            last_action_info = "Matériau non compatible"
+            last_action_info = "Material does not use nodes"
             return
         
-        # Chercher le nœud de texture d'image
+        # Find the image texture node in the material
         texture_node = None
         for node in material.node_tree.nodes:
             if node.type == 'TEX_IMAGE' and node.image:
@@ -572,75 +735,75 @@ def separate_image_colors(obj):
                 break
         
         if not texture_node:
-            last_action_info = "Pas d'image trouvée dans le matériau"
+            last_action_info = "No image texture found in material"
             return
         
-        # Récupérer les informations de l'objet original
+        # Get the original location, scale, and rotation of the object
         original_location = obj.location.copy()
         original_scale = obj.scale.copy()
         original_rotation = obj.rotation_euler.copy()
         
-        # Créer trois plans pour R, G, B
+        # Define colors for separation
         colors = [
-            ("R", (1.0, 0.0, 0.0, 1.0)),  # Rouge
-            ("G", (0.0, 1.0, 0.0, 1.0)),  # Vert
-            ("B", (0.0, 0.0, 1.0, 1.0))   # Bleu
+            ("R", (1.0, 0.0, 0.0, 1.0)),  # Red
+            ("G", (0.0, 1.0, 0.0, 1.0)),  # Green
+            ("B", (0.0, 0.0, 1.0, 1.0))   # Blue
         ]
         
-        # Supprimer les anciens plans de couleur s'ils existent
+        # Remove existing color planes if any
         for old_plane in color_planes:
             if old_plane in bpy.data.objects:
                 bpy.data.objects.remove(old_plane, do_unlink=True)
         
         color_planes = []
         
-        # Créer les nouveaux plans de couleur
+        # Create new planes for each color
         for idx, (color_name, color_value) in enumerate(colors):
-            # Dupliquer le plan
+            # Duplicate the original object
             bpy.ops.object.select_all(action='DESELECT')
             obj.select_set(True)
             bpy.context.view_layer.objects.active = obj
             bpy.ops.object.duplicate()
             
-            # Récupérer le nouvel objet
+            # Get the duplicated object
             color_plane = bpy.context.active_object
             color_plane.name = f"{obj.name}_{color_name}"
             
-            # Créer un nouveau matériau basé sur l'original mais avec filtre de couleur
+            # Create a new material for the color plane
             new_mat = material.copy()
             new_mat.name = f"{material.name}_{color_name}"
             
-            # Modifier les nœuds pour filtrer la couleur
+            # Set the new material to use nodes
             try:
                 nodes = new_mat.node_tree.nodes
                 links = new_mat.node_tree.links
                 
-                # Ajouter un nœud de mixage pour filtrer la couleur
+                # Clear existing nodes
                 mix_node = nodes.new(type='ShaderNodeMixRGB')
                 mix_node.blend_type = 'MULTIPLY'
                 mix_node.inputs[0].default_value = 1.0  # Factor
                 mix_node.inputs[2].default_value = color_value  # Color
                 
-                # Trouver les connexions existantes
+                # Find the image texture node and connect it to the mix node
                 for node in nodes:
                     if node.type == 'TEX_IMAGE':
-                        # Connecter la texture au mixage, puis aux nœuds suivants
+                        # Disconnect the image texture from the output
                         output_links = []
                         for link in links:
                             if link.from_node == node and link.from_socket == node.outputs[0]:
                                 output_links.append((link.to_node, link.to_socket))
                                 links.remove(link)
                         
-                        # Connecter l'image au mixage
+                        # Connect the image texture to the mix node
                         links.new(node.outputs[0], mix_node.inputs[1])
                         
-                        # Reconnecter les sorties
+                        # Connect the mix node to the output
                         for to_node, to_socket in output_links:
                             links.new(mix_node.outputs[0], to_socket)
                         
                         break
                 
-                # Ajouter une légère émission pour plus d'effet Y2K
+                # Set the mix node to output the color
                 for node in nodes:
                     if node.type == 'PRINCIPLED_BSDF':
                         node.inputs['Emission'].default_value = color_value
@@ -649,10 +812,10 @@ def separate_image_colors(obj):
             except Exception as e:
                 print(f"Erreur lors de la modification des nœuds: {e}")
             
-            # Appliquer le nouveau matériau
+            # Assign the new material to the duplicated object
             color_plane.data.materials[0] = new_mat
             
-            # Positionner le plan avec un léger décalage
+            # Set the color plane location slightly offset from the original
             offset = 0.1 * (idx + 1)
             color_plane.location = (
                 original_location.x + random.uniform(-offset, offset),
@@ -660,7 +823,7 @@ def separate_image_colors(obj):
                 original_location.z + offset
             )
             
-            # Ajouter un effet de scale légèrement différent
+            # Scale the color plane slightly larger than the original
             scale_factor = 1.0 + (0.05 * idx)
             color_plane.scale = (
                 original_scale.x * scale_factor,
@@ -668,37 +831,37 @@ def separate_image_colors(obj):
                 original_scale.z * scale_factor
             )
             
-            # Appliquer une légère rotation
+            # Rotate the color plane slightly
             color_plane.rotation_euler.z = original_rotation.z + (0.05 * idx)
             
-            # Stocker le plan créé
+            # Add the color plane to the list
             color_planes.append(color_plane)
         
-        # Masquer l'original
+        # Hide the original object
         obj.hide_set(True)
         
-        last_action_info = f"Image séparée en {len(colors)} couches de couleur"
+        last_action_info = f"Image separated in {len(colors)} color layers"
         play_sound("select")  # Utiliser un son pour indiquer l'effet
         
         return True
     except Exception as e:
-        print(f"Erreur dans separate_image_colors: {e}")
-        last_action_info = f"Erreur de séparation: {e}"
+        print(f"Error in separate_image_colors: {e}")
+        last_action_info = f"Error of split: {e}"
         return False
 
 def restore_original_image():
-    """Restaure l'image originale et supprime les plans de couleur"""
+    """"Restore the original image after color separation"""
     global color_planes, selected_object, last_action_info
     
     try:
-        # Supprimer les plans de couleur
+        # Remove color planes
         for plane in color_planes:
             if plane in bpy.data.objects:
                 bpy.data.objects.remove(plane, do_unlink=True)
         
         color_planes = []
         
-        # Restaurer l'original s'il existe
+        # Unhide the original object
         if selected_object:
             selected_object.hide_set(False)
             last_action_info = "Image originale restaurée"
@@ -709,14 +872,21 @@ def restore_original_image():
         last_action_info = f"Erreur de restauration: {e}"
         return False
 
-def handle_hand_gesture(gesture, x, y, last_pos, last_gest):
+def handle_hand_gesture(gesture, x, y, last_pos=None, last_gest=None):
     """Process individual hand gesture"""
-    global selected_object, last_action_info
+    global selected_object, last_action_info, painting_mode
     
     try:
+        # Check if we're in painting mode
+        if painting_mode:
+            if handle_painting(gesture, x, y):
+                # If painting was handled, return early
+                return
+        
+        # Original gesture handling code
         if gesture == "point":
-            # Select object
-            if last_gest != "point":  # Only select on gesture change
+            # Only select object if not in painting mode
+            if not painting_mode and last_gest != "point":
                 ray_cast_select(x, y)
         elif gesture == "pinch":
             # Move object
@@ -729,7 +899,7 @@ def handle_hand_gesture(gesture, x, y, last_pos, last_gest):
 def handle_two_hand_gestures(gesture1, x1, y1, gesture2, x2, y2):
     """Handle gestures that require two hands"""
     global selected_object, last_position, last_position_hand2, last_action_info
-    global last_creation_time, color_separation_mode, color_planes
+    global last_creation_time, color_separation_mode, color_planes, painting_mode
     
     try:
         # Handle rotation and scaling (two pinches)
@@ -761,6 +931,14 @@ def handle_two_hand_gestures(gesture1, x1, y1, gesture2, x2, y2):
                 # Optionally, update the action info to inform about cooldown
                 remaining = creation_cooldown - (current_time - last_creation_time)
                 last_action_info = f"Creation cooldown: {remaining:.1f}s remaining"
+        
+        # Handle painting toggle (fist + point)
+        elif (gesture1 == "fist" and gesture2 == "point") or (gesture1 == "point" and gesture2 == "fist"):
+            toggle_painting_mode()
+        
+        # Handle paint clear (fist + palm)
+        elif (gesture1 == "fist" and gesture2 == "palm") or (gesture1 == "palm" and gesture2 == "fist"):
+            clear_paint_trail()
         
         # Handle deletion (two fists)
         elif gesture1 == "fist" and gesture2 == "fist" and selected_object:
@@ -869,6 +1047,8 @@ def register_handlers():
         
         def draw_callback_px(self, context):
             """Draw callback for displaying gesture info in viewport"""
+            global painting_mode, paint_trail
+            
             if not show_gestures_overlay:
                 return
                 
@@ -896,6 +1076,11 @@ def register_handlers():
             else:
                 blf.draw(font_id, "Nothing selected")
             
+            # Draw painting mode info
+            if painting_mode:
+                blf.position(font_id, 20, height - 120, 0)
+                blf.draw(font_id, f"Painting Mode: ACTIVE - {len(paint_trail)} points")
+            
             # Draw gesture guide
             blf.position(font_id, width - 250, height - 135, 0)
             blf.draw(font_id, "Two Palms: Create")
@@ -903,6 +1088,10 @@ def register_handlers():
             blf.draw(font_id, "Two V Signs: Duplicate")
             blf.position(font_id, width - 250, height - 185, 0)
             blf.draw(font_id, "Two Pinches: Rotate+Scale")
+            blf.position(font_id, width - 250, height - 210, 0)
+            blf.draw(font_id, "Fist+Point: Toggle Painting")
+            blf.position(font_id, width - 250, height - 235, 0)
+            blf.draw(font_id, "Fist+Palm: Clear Paint")
         
         # Add draw callback to all 3D viewports
         for area in bpy.context.screen.areas:
