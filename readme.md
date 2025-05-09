@@ -158,4 +158,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 Project Link: [https://github.com/NathanKneT/RTHT-3D](https://github.com/NathanKneT/RTHT-3D)
 
-Join our [Discord GLHF community](https://discord.gg/example) for discussions and support!
+Join our [Discord GLHF community](https://discord.gg/akNR2Yc97T) for discussions and support!
