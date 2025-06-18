@@ -7,6 +7,15 @@ An interactive 3D art framework combining hand gesture recognition with a nostal
 
 ![RTHT-3D Demo](docs/gif/demo.gif)
 
+📸 Viral Demo on Instagram
+This project gained attention beyond the dev community — our interactive hand-tracking demo reached 200,000+ views on Instagram, resonating with digital artists, designers, and tech enthusiasts alike.
+
+▶️ Watch the viral demo:
+🔗 instagram.com/p/DJLriUMSSpy
+
+<div align="center"> <a href="https://www.instagram.com/p/DJLriUMSSpy/"> <img src="https://github.com/NathanKneT/RTHT-3D/blob/main/docs/img/insta_preview.jpg" alt="Instagram Demo Preview" width="400"/> </a> </div>
+This shows not only the power of real-time gesture interaction but also how intuitive interfaces can inspire and engage a broader audience when paired with strong aesthetics.
+
 ## ✨ Features
 
 - Real-time hand tracking and gesture recognition using MediaPipe
